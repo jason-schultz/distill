@@ -9,12 +9,12 @@ This is an umbrella application with the following structure:
 ```
 distill/
 ├── apps/
-│   └── kcore/          # Core library used by all competition apps
+│   └── dcore/          # Core library used by all competition apps
 │       ├── lib/
-│       │   ├── kcore/
+│       │   ├── dcore/
 │       │   │   ├── data.ex      # Data loading and transformation utilities
 │       │   │   ├── metrics.ex   # ML metrics (accuracy, etc.)
-│       │   │   └── kcore.ex     # Main module
+│       │   │   └── dcore.ex     # Main module
 │       │   └── mix/
 │       │       └── tasks/
 │       │           └── comp.new.ex  # Mix task to scaffold new competitions
@@ -27,11 +27,11 @@ distill/
 └── README.md
 ```
 
-## Core Library (`kcore`)
+## Core Library (`dcore`)
 
-The `kcore` app provides shared functionality for all competition solutions:
+The `dcore` app provides shared functionality for all competition solutions:
 
-### `Kcore.Data`
+### `Dcore.Data`
 
 Utilities for loading and transforming data:
 
@@ -40,7 +40,7 @@ Utilities for loading and transforming data:
 - **`drop_to_nx/2`** - Drop columns and convert DataFrame to tensor (for test data)
 - **`write_submission!/4`** - Write predictions to CSV in Kaggle submission format
 
-### `Kcore.Metrics`
+### `Dcore.Metrics`
 
 Machine learning metrics:
 
@@ -86,19 +86,19 @@ mix comp.new titanic
 ```
 
 This will:
-- Create a new app at `apps/ktitanic/`
-- Add `kcore` as a dependency
-- Generate a model template in `lib/ktitanic/model.ex`
-- Generate a feature engineering template in `lib/ktitanic/fe.ex`
+- Create a new app at `apps/dtitanic/`
+- Add `dcore` as a dependency
+- Generate a model template in `lib/dtitanic/model.ex`
+- Generate a feature engineering template in `lib/dtitanic/fe.ex`
 - Create directories for data (`priv/data/`) and results (`priv/runs/`)
 - Create a mix task `mix comp.titanic.train` to run your model
 
 ### Competition App Structure
 
 ```
-apps/ktitanic/
+apps/dtitanic/
 ├── lib/
-│   ├── ktitanic/
+│   ├── dtitanic/
 │   │   ├── fe.ex          # Feature engineering pipeline
 │   │   └── model.ex       # Model definition and training
 │   └── mix/
@@ -119,13 +119,13 @@ apps/ktitanic/
 2. **Add your data**:
    ```bash
    # Download competition data from Kaggle
-   cp ~/Downloads/train.csv apps/ktitanic/priv/data/
-   cp ~/Downloads/test.csv apps/ktitanic/priv/data/
+   cp ~/Downloads/train.csv apps/dtitanic/priv/data/
+   cp ~/Downloads/test.csv apps/dtitanic/priv/data/
    ```
 
-3. **Implement feature engineering** in `apps/ktitanic/lib/ktitanic/fe.ex`:
+3. **Implement feature engineering** in `apps/dtitanic/lib/dtitanic/fe.ex`:
    ```elixir
-   defmodule Ktitanic.FE do
+   defmodule Dtitanic.FE do
      alias Explorer.DataFrame, as: DF
      
      def pipeline(df) do
@@ -137,21 +137,21 @@ apps/ktitanic/
    end
    ```
 
-4. **Implement your model** in `apps/ktitanic/lib/ktitanic/model.ex`:
+4. **Implement your model** in `apps/dtitanic/lib/dtitanic/model.ex`:
    ```elixir
-   defmodule Ktitanic.Model do
-     alias Kcore.Data
+   defmodule Dtitanic.Model do
+     alias Dcore.Data
      
-     @train "apps/ktitanic/priv/data/train.csv"
-     @test  "apps/ktitanic/priv/data/test.csv"
-     @out   "apps/ktitanic/priv/runs/submission.csv"
+     @train "apps/dtitanic/priv/data/train.csv"
+     @test  "apps/dtitanic/priv/data/test.csv"
+     @out   "apps/dtitanic/priv/runs/submission.csv"
      
      def run do
-       {train, test} = Data.load_csv!(@train, @test)
+       {train, test} = Data.load_csv(@train, @test)
        
        # Transform data
-       train = Ktitanic.FE.pipeline(train)
-       test = Ktitanic.FE.pipeline(test)
+       train = Dtitanic.FE.pipeline(train)
+       test = Dtitanic.FE.pipeline(test)
        
        # Prepare tensors
        {x_train, y_train} = Data.to_xy(train, "Survived", drop: ["PassengerId"])
@@ -188,7 +188,7 @@ apps/ktitanic/
    ```bash
    6. **Submit to Kaggle**:
    ```bash
-   # Your submission file is at apps/ktitanic/priv/runs/submission.csv
+   # Your submission file is at apps/dtitanic/priv/runs/submission.csv
    ```
 
 ## Dependencies
@@ -227,7 +227,7 @@ Tests use `Nx.BinaryBackend` for simplicity (configured in `config/test.exs`).
 mix test
 
 # Run tests for a specific app
-cd apps/kcore && mix test
+cd apps/dcore && mix test
 
 # Run with detailed output
 mix test --trace
@@ -237,18 +237,18 @@ mix test --trace
 
 ### Adding New Utilities
 
-Add shared utilities to the `kcore` app:
+Add shared utilities to the `dcore` app:
 
-1. Create your module in `apps/kcore/lib/kcore/`
-2. Add tests in `apps/kcore/test/kcore/`
-3. Run tests: `cd apps/kcore && mix test`
+1. Create your module in `apps/dcore/lib/dcore/`
+2. Add tests in `apps/dcore/test/dcore/`
+3. Run tests: `cd apps/dcore && mix test`
 
 ### Adding New Metrics
 
-Add metrics to `apps/kcore/lib/kcore/metrics.ex`:
+Add metrics to `apps/dcore/lib/dcore/metrics.ex`:
 
 ```elixir
-defmodule Kcore.Metrics do
+defmodule Dcore.Metrics do
   def accuracy(y_true, y_pred) do
     # ... existing implementation
   end
@@ -265,7 +265,7 @@ end
 - Use `Explorer.DataFrame` for data manipulation before converting to tensors
 - Test your pipeline with small data samples first
 - Use `mix comp.new` for consistent project structure
-- Add custom metrics to `Kcore.Metrics` for reuse across competitions
+- Add custom metrics to `Dcore.Metrics` for reuse across competitions
 
 ## License
 
