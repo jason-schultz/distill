@@ -18,8 +18,8 @@ import Config
 #
 
 # choose one, comment out the other
-# config :nx, default_backend: EXLA.Backend
-config :nx, default_backend: Torchx.Backend
+config :nx, default_backend: EXLA.Backend
+# config :nx, default_backend: Torchx.Backend
 
 # Import environment specific config. This must be at the bottom
 # so it can override the config defined above.
