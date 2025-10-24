@@ -102,7 +102,9 @@ This will:
 - Generate a model template in `lib/dtitanic/model.ex`
 - Generate a feature engineering template in `lib/dtitanic/fe.ex`
 - Create directories for data (`priv/data/`) and results (`priv/runs/`)
-- Create a mix task `mix comp.titanic.train` to run your model
+- Create mix tasks:
+  - `mix comp.titanic.validate` - Validate model with train/val split
+  - `mix comp.titanic.train` - Train and generate submission.csv
 
 ### Competition App Structure
 
@@ -115,6 +117,7 @@ apps/dtitanic/
 │   └── mix/
 │       └── tasks/
 │           └── comp.titanic.train.ex  # Training task
+│           └── comp.titanic.validate.ex  # Validation task
 └── priv/
     ├── data/              # Place train.csv and test.csv here
     └── runs/              # Model outputs (submission.csv)
@@ -243,12 +246,31 @@ apps/dtitanic/
    end
    ```
 
-5. **Train and generate submission**:
+5. **Validate your model locally** (optional but recommended):
+   ```bash
+   mix comp.titanic.validate
+   ```
+   
+   This will:
+   - Split your training data into 80% train / 20% validation
+   - Train the model on the training portion
+   - Evaluate accuracy on the validation portion
+   - Give you a local estimate before submitting to Kaggle
+   
+   Example output:
+   ```
+   Train size: 712, Val size: 179
+   =================================
+   Validation Accuracy: 73.03%
+   =================================
+   ```
+
+6. **Train and generate submission**:
    ```bash
    mix comp.titanic.train
    ```
 
-6. **Submit to Kaggle**:
+7. **Submit to Kaggle**:
    ```bash
    6. **Submit to Kaggle**:
    ```bash
@@ -325,6 +347,7 @@ end
 
 ## Tips
 
+- **Use validation before submission**: Run `mix comp.<slug>.validate` to get a local accuracy estimate before submitting to Kaggle
 - Keep feature engineering in the `FE` module for reusability
 - Use `Explorer.DataFrame` for data manipulation before converting to tensors
 - Use `col("ColumnName")` in `DF.mutate` to reference columns with uppercase names
@@ -334,6 +357,7 @@ end
 - Add custom metrics to `Dcore.Metrics` for reuse across competitions
 - Use `%{}` as initial state in `Axon.Loop.run` for proper model initialization
 - Set `compiler: EXLA` in training loop for best performance
+- Validation accuracy is typically optimistic - expect test accuracy to be 5-10% lower due to distribution shift
 
 ## License
 
