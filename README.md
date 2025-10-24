@@ -2,42 +2,6 @@
 
 An Elixir umbrella project for organizing and managing machine learning competitions (such as Kaggle) using the Nx ecosystem (Nx, Axon, Explorer, Scholar).
 
-## Project Structure
-
-This is an umbrella application with the following structure:
-
-```
-distill/
-├── apps/
-│   ├── dcore/          # Core library used by all competition apps
-│   │   ├── lib/
-│   │   │   ├── dcore/
-│   │   │   │   ├── data.ex      # Data loading and transformation utilities
-│   │   │   │   ├── metrics.ex   # ML metrics (accuracy, etc.)
-│   │   │   │   └── dcore.ex     # Main module
-│   │   │   └── mix/
-│   │   │       └── tasks/
-│   │   │           └── comp.new.ex  # Mix task to scaffold new competitions
-│   │   └── test/        # Comprehensive test suite
-│   └── d<competition>/  # Generated competition apps (e.g., dtitanic)
-│       ├── lib/
-│       │   ├── d<competition>/
-│       │   │   ├── fe.ex        # Feature engineering pipeline
-│       │   │   └── model.ex     # Model definition and training
-│       │   └── mix/
-│       │       └── tasks/
-│       │           └── comp.<competition>.train.ex
-│       └── priv/
-│           ├── data/            # Place train.csv and test.csv here
-│           └── runs/            # Model outputs (submission.csv)
-├── config/
-│   ├── config.exs      # Shared configuration
-│   ├── dev.exs         # Development config
-│   ├── test.exs        # Test config (uses Nx.BinaryBackend)
-│   └── prod.exs        # Production config
-└── README.md
-```
-
 ## Core Library (`dcore`)
 
 The `dcore` app provides shared functionality for all competition solutions:
