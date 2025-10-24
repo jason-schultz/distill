@@ -9,16 +9,27 @@ This is an umbrella application with the following structure:
 ```
 distill/
 ├── apps/
-│   └── dcore/          # Core library used by all competition apps
+│   ├── dcore/          # Core library used by all competition apps
+│   │   ├── lib/
+│   │   │   ├── dcore/
+│   │   │   │   ├── data.ex      # Data loading and transformation utilities
+│   │   │   │   ├── metrics.ex   # ML metrics (accuracy, etc.)
+│   │   │   │   └── dcore.ex     # Main module
+│   │   │   └── mix/
+│   │   │       └── tasks/
+│   │   │           └── comp.new.ex  # Mix task to scaffold new competitions
+│   │   └── test/        # Comprehensive test suite
+│   └── d<competition>/  # Generated competition apps (e.g., dtitanic)
 │       ├── lib/
-│       │   ├── dcore/
-│       │   │   ├── data.ex      # Data loading and transformation utilities
-│       │   │   ├── metrics.ex   # ML metrics (accuracy, etc.)
-│       │   │   └── dcore.ex     # Main module
+│       │   ├── d<competition>/
+│       │   │   ├── fe.ex        # Feature engineering pipeline
+│       │   │   └── model.ex     # Model definition and training
 │       │   └── mix/
 │       │       └── tasks/
-│       │           └── comp.new.ex  # Mix task to scaffold new competitions
-│       └── test/        # Comprehensive test suite
+│       │           └── comp.<competition>.train.ex
+│       └── priv/
+│           ├── data/            # Place train.csv and test.csv here
+│           └── runs/            # Model outputs (submission.csv)
 ├── config/
 │   ├── config.exs      # Shared configuration
 │   ├── dev.exs         # Development config
@@ -126,13 +137,46 @@ apps/dtitanic/
 3. **Implement feature engineering** in `apps/dtitanic/lib/dtitanic/fe.ex`:
    ```elixir
    defmodule Dtitanic.FE do
+     require Explorer.DataFrame
      alias Explorer.DataFrame, as: DF
+     alias Explorer.Series
      
      def pipeline(df) do
        df
-       |> DF.mutate(Age: fill_missing(Age, :mean))
-       |> DF.mutate(Sex: cast(Sex == "male", :integer))
-       # ... more transformations
+       # Convert Sex to binary (male = 1, female = 0)
+       |> DF.mutate(Sex: cast(col("Sex") == "male", :integer))
+       # Fill missing Age with median
+       |> fill_age()
+       # Fill missing Fare with median (for test set)
+       |> fill_fare()
+       # Fill missing Embarked with mode (most common)
+       |> fill_embarked()
+       # Convert Embarked to numeric (one-hot encoding)
+       |> DF.mutate(Embarked_C: cast(col("Embarked") == "C", :integer))
+       |> DF.mutate(Embarked_Q: cast(col("Embarked") == "Q", :integer))
+       |> DF.mutate(Embarked_S: cast(col("Embarked") == "S", :integer))
+       # Drop columns we won't use
+       |> DF.discard(["Name", "Ticket", "Cabin", "Embarked"])
+     end
+     
+     defp fill_age(df) do
+       age_series = DF.pull(df, "Age")
+       median_age = age_series |> Series.median() |> then(fn x -> x || 28.0 end)
+       filled_age = Series.fill_missing(age_series, median_age)
+       DF.put(df, "Age", filled_age)
+     end
+     
+     defp fill_fare(df) do
+       fare_series = DF.pull(df, "Fare")
+       median_fare = fare_series |> Series.median() |> then(fn x -> x || 14.5 end)
+       filled_fare = Series.fill_missing(fare_series, median_fare)
+       DF.put(df, "Fare", filled_fare)
+     end
+     
+     defp fill_embarked(df) do
+       embarked_series = DF.pull(df, "Embarked")
+       filled_embarked = Series.fill_missing(embarked_series, "S")
+       DF.put(df, "Embarked", filled_embarked)
      end
    end
    ```
@@ -147,34 +191,54 @@ apps/dtitanic/
      @out   "apps/dtitanic/priv/runs/submission.csv"
      
      def run do
+       IO.puts("Loading data...")
        {train, test} = Data.load_csv(@train, @test)
        
-       # Transform data
+       IO.puts("Applying feature engineering...")
        train = Dtitanic.FE.pipeline(train)
        test = Dtitanic.FE.pipeline(test)
        
-       # Prepare tensors
+       IO.puts("Preparing tensors...")
        {x_train, y_train} = Data.to_xy(train, "Survived", drop: ["PassengerId"])
        x_test = Data.drop_to_nx(test, ["PassengerId"])
-       ids = Explorer.DataFrame.pull(test, "PassengerId")
+       test_ids = Explorer.DataFrame.pull(test, "PassengerId")
        
-       # Train model
-       model = build_model()
-       trained_model = Axon.Loop.trainer(model, :binary_cross_entropy, :adam)
-         |> Axon.Loop.run(x_train, y_train, epochs: 10)
+       IO.puts("Building model...")
+       model = build_model(x_train)
        
-       # Make predictions
-       predictions = Axon.predict(trained_model, x_test)
+       IO.puts("Training model...")
+       trained_state = train_model(model, x_train, y_train)
        
-       # Write submission
-       Data.write_submission!(@out, ["PassengerId", "Survived"], ids, predictions)
+       IO.puts("Making predictions...")
+       predictions = Axon.predict(model, trained_state, x_test)
+         |> Nx.squeeze()
+         |> Nx.round()
+       
+       IO.puts("Writing submission...")
+       Data.write_submission!(@out, ["PassengerId", "Survived"], test_ids, predictions)
+       
+       IO.puts("Done! Submission written to #{@out}")
      end
      
-     defp build_model() do
-       Axon.input("input")
+     defp build_model(x_train) do
+       {_rows, n_features} = Nx.shape(x_train)
+       
+       Axon.input("input", shape: {nil, n_features})
        |> Axon.dense(64, activation: :relu)
+       |> Axon.dropout(rate: 0.3)
        |> Axon.dense(32, activation: :relu)
+       |> Axon.dropout(rate: 0.3)
        |> Axon.dense(1, activation: :sigmoid)
+     end
+     
+     defp train_model(model, x_train, y_train) do
+       y_train = Nx.reshape(y_train, {:auto, 1})
+       train_data = [{x_train, y_train}]
+       
+       model
+       |> Axon.Loop.trainer(:binary_cross_entropy, :adam)
+       |> Axon.Loop.metric(:accuracy)
+       |> Axon.Loop.run(train_data, %{}, epochs: 20, compiler: EXLA)
      end
    end
    ```
@@ -202,7 +266,7 @@ The framework uses the Nx ecosystem:
 - **[Explorer](https://github.com/elixir-nx/explorer)** (~> 0.10.1) - DataFrames for data manipulation
 - **[Axon](https://github.com/elixir-nx/axon)** (~> 0.7.0) - Neural networks
 - **[Scholar](https://github.com/elixir-nx/scholar)** (~> 0.4.0) - Machine learning algorithms
-- **[EXLA](https://github.com/elixir-nx/nx/tree/main/exla)** (optional) - XLA compiler backend
+- **[EXLA](https://github.com/elixir-nx/nx/tree/main/exla)** (~> 0.10.0) - XLA compiler backend (recommended)
 - **[Torchx](https://github.com/elixir-nx/nx/tree/main/torchx)** (optional) - LibTorch backend
 
 ## Configuration
@@ -210,11 +274,11 @@ The framework uses the Nx ecosystem:
 The Nx backend is configured in `config/config.exs`:
 
 ```elixir
-# Choose your backend (default: Torchx.Backend)
-config :nx, default_backend: Torchx.Backend
+# Default backend: EXLA (recommended for performance)
+config :nx, default_backend: EXLA.Backend
 
 # Alternative backends:
-# config :nx, default_backend: EXLA.Backend
+# config :nx, default_backend: Torchx.Backend
 # config :nx, default_backend: Nx.BinaryBackend
 ```
 
@@ -263,9 +327,13 @@ end
 
 - Keep feature engineering in the `FE` module for reusability
 - Use `Explorer.DataFrame` for data manipulation before converting to tensors
+- Use `col("ColumnName")` in `DF.mutate` to reference columns with uppercase names
+- Pull series out and use `Series.fill_missing` to handle missing values, then `DF.put` back
 - Test your pipeline with small data samples first
 - Use `mix comp.new` for consistent project structure
 - Add custom metrics to `Dcore.Metrics` for reuse across competitions
+- Use `%{}` as initial state in `Axon.Loop.run` for proper model initialization
+- Set `compiler: EXLA` in training loop for best performance
 
 ## License
 
