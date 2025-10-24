@@ -36,6 +36,72 @@ defmodule Dtitanic.Model do
     IO.puts("Done! Submission written to #{@out}")
   end
 
+  def validate(val_split \\ 0.2) do
+    IO.puts("Loading data ...")
+    {train, _test} = Data.load_csv(@train, @test)
+
+    IO.puts("Applying feature engineering ...")
+    train = Dtitanic.FE.pipeline(train)
+
+    IO.puts("Preparing tensors ...")
+    {x, y} = Data.to_xy(train, "Survived", drop: ["PassengerId"])
+
+    IO.puts(
+      "Splitting into train/validation (#{(1 - val_split) * 100}% / #{val_split * 100}%) ..."
+    )
+
+    {{x_train, y_train}, {x_val, y_val}} = split_train_val(x, y, val_split)
+
+    IO.puts("Train size: #{elem(Nx.shape(x_train), 0)}, Val size: #{elem(Nx.shape(x_val), 0)}")
+
+    IO.puts("Building Model ...")
+    model = build_model(x_train)
+
+    IO.puts("Training Model ...")
+    trained_state = train_model(model, x_train, y_train)
+
+    IO.puts("Evaluating on validation set ...")
+
+    # Get predictions
+    predictions =
+      Axon.predict(model, trained_state, x_val)
+      |> Nx.squeeze()
+      |> Nx.round()
+
+    # Calculate accuracy
+    accuracy = Dcore.Metrics.accuracy(y_val, predictions)
+
+    IO.puts("\n=================================")
+    IO.puts("Validation Accuracy: #{Float.round(accuracy * 100, 2)}%")
+    IO.puts("=================================\n")
+
+    # Show some sample predictions vs actual
+    y_val_list = Nx.to_flat_list(y_val) |> Enum.take(10)
+    pred_list = Nx.to_flat_list(predictions) |> Enum.take(10)
+
+    IO.puts("Sample predictions (first 10):")
+    IO.puts("Actual:    #{inspect(y_val_list)}")
+    IO.puts("Predicted: #{inspect(pred_list)}")
+
+    accuracy
+  end
+
+  defp split_train_val(x, y, val_split) do
+    n = elem(Nx.shape(x), 0)
+    val_size = floor(n * val_split)
+    train_size = n - val_size
+
+    # Split features
+    x_train = Nx.slice_along_axis(x, 0, train_size, axis: 0)
+    x_val = Nx.slice_along_axis(x, train_size, val_size, axis: 0)
+
+    # Split labels
+    y_train = Nx.slice_along_axis(y, 0, train_size, axis: 0)
+    y_val = Nx.slice_along_axis(y, train_size, val_size, axis: 0)
+
+    {{x_train, y_train}, {x_val, y_val}}
+  end
+
   defp build_model(x_train) do
     # Get number of reatures from training data
     {_rows, n_features} = Nx.shape(x_train)
